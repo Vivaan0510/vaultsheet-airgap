@@ -881,9 +881,9 @@ with tab_b2b:
     st.markdown("#### 🏭 B2B Vendor Contract & GST Auditor")
     vendor_df: pd.DataFrame | None = st.session_state.get("vendor_df")
 
-    if vendor_df is None or vendor_df.empty:
-        st.warning("No `vendor_master.csv` loaded. Enable or upload a vendor contract master in the sidebar.")
-    else:
+if vendor_df is None or vendor_df.empty:
+        st.info("ℹ️ **Optional Module:** No `vendor_master.csv` loaded. Skipping B2B contract reconciliation. Your PDF statement is fully parsed and available for category analytics and Excel export!")
+else:
         st.markdown("##### Active Vendor Contract Master (`vendor_master.csv`)")
         st.dataframe(vendor_df, use_container_width=True, hide_index=True)
 
