@@ -1,8 +1,12 @@
 streamlit
 pandas
+numpy
 openpyxl
 pdfplumber
 pypdf
-pymupdf
+pypdfium2
+rapidocr-onnxruntime
+opencv-python-headless
 reportlab
 pillow
+requests
