@@ -432,6 +432,34 @@ with st.sidebar:
         value="HDFC / Corporate Current A/c",
     )
 
+
+    st.markdown("---")
+    st.markdown("### 🔑 4. License & Activation")
+    
+    # Generate a deterministic local Machine ID (100% offline using built-in uuid & hashlib)
+    import uuid
+    import hashlib
+    machine_id = "VS-" + hashlib.sha256(str(uuid.getnode()).encode()).hexdigest()[:8].upper()
+    st.caption(f"🖥️ **Machine ID:** `{machine_id}`")
+
+    license_key_input = st.text_input(
+        "VaultSheet Pro License Key",
+        type="password",
+        placeholder="Enter Pro Key (e.g. VS-PRO-...)",
+        help="Offline cryptographic activation key bound to your Machine ID.",
+    )
+
+    # Expected offline key for this machine (or master developer override key)
+    expected_pro_key = "VS-PRO-" + hashlib.sha256((machine_id + "-VAULTSHEET-2026-SECRET").encode()).hexdigest()[:12].upper()
+    is_pro_unlocked = (license_key_input.strip() == expected_pro_key) or (license_key_input.strip() == "VS-MASTER-DEV-2026")
+    st.session_state["is_pro_unlocked"] = is_pro_unlocked
+
+    if is_pro_unlocked:
+        st.success("✅ **VaultSheet Pro Active** (Unlimited Rows & Tally XML Unlocked)")
+    else:
+        st.warning("🔒 **Free Trial Mode:** Capped at 50 rows/PDF. TallyPrime XML locked.")
+
+    st.markdown("---")
     run_btn = st.button(
         "🚀 Run Forensic Audit Pipeline",
         type="primary",
