@@ -471,10 +471,11 @@ def enrich_and_audit_ledger(
 
     out_df = df[required_input_cols].copy()
 
-    # Load B2B Vendor Master CSV if provided
+# Load B2B Vendor Master CSV if provided
     vendor_rules: list[dict[str, Any]] = []
     if vendor_csv_path and os.path.exists(vendor_csv_path):
-        v_df = pd.read_csv(vendor_csv_path)
+        v_df = pd.read_csv(vendor_csv_path, encoding="utf-8-sig")
+        v_df.columns = v_df.columns.str.strip().str.lower()
         for _, v_row in v_df.iterrows():
             kw = str(v_row.get("vendor_keyword", "")).strip()
             if kw:
@@ -483,9 +484,7 @@ def enrich_and_audit_ledger(
                     "contract_amount": round(float(v_row["contract_amount"]), 2),
                     "gst_rate_pct": float(v_row["gst_rate_pct"]),
                     "expected_total": round(float(v_row["expected_total"]), 2),
-                })
-
-    # Pre-compute statistical outlier threshold for Rule 4 (minimum 5 debit rows)
+                })    # Pre-compute statistical outlier threshold for Rule 4 (minimum 5 debit rows)
     positive_debits = out_df.loc[out_df["debit"] > 0, "debit"].astype(float)
     if len(positive_debits) >= 5:
         debit_mean = float(positive_debits.mean())

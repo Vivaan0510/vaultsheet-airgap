@@ -30,7 +30,6 @@ import streamlit as st
 # ==============================================================================
 from parser_engine import parse_bank_pdf
 from categorizer_and_auditor import enrich_and_audit_ledger
-
 try:
     from excel_exporter import export_to_excel
 except ImportError:
@@ -467,24 +466,74 @@ if run_btn and raw_pdf_bytes is not None:
             pw_to_use = pdf_password.strip() if pdf_password and pdf_password.strip() else None
             parsed_df, parsed_meta = parse_bank_pdf(raw_pdf_bytes, password=pw_to_use)
 
-            # Step 2: Resolve B2B Vendor Master CSV
+# Step 2: Resolve & Auto-Map Universal B2B Vendor Master CSV
             vendor_path_to_use: str | None = None
             temp_vendor_file: str | None = None
 
+            def normalize_vendor_df(df_in: pd.DataFrame) -> pd.DataFrame:
+                df_in = df_in.copy()
+                df_in.columns = df_in.columns.astype(str).str.strip().str.lower()
+                
+                # Universal Synonym Dictionary
+                col_map = {}
+                for col in df_in.columns:
+                    if col in ["vendor_keyword", "counterparty", "vendor", "vendor_name", "merchant", "party", "supplier", "name", "biller"]:
+                        if "vendor_keyword" not in col_map.values():
+                            col_map[col] = "vendor_keyword"
+                    elif col in ["contract_amount", "amount", "base_amount", "rate", "price", "cost", "value", "monthly_fee"]:
+                        if "contract_amount" not in col_map.values():
+                            col_map[col] = "contract_amount"
+                    elif col in ["gst_rate_pct", "gst", "gst_rate", "tax_rate", "tax_pct", "vat", "tax"]:
+                        if "gst_rate_pct" not in col_map.values():
+                            col_map[col] = "gst_rate_pct"
+                    elif col in ["expected_total", "total", "total_amount", "gross_amount", "net_amount", "invoice_total"]:
+                        if "expected_total" not in col_map.values():
+                            col_map[col] = "expected_total"
+                
+                df_in = df_in.rename(columns=col_map)
+                
+                # Fallback: if no keyword column matched, use description or the first text column
+                if "vendor_keyword" not in df_in.columns:
+                    if "description" in df_in.columns:
+                        df_in["vendor_keyword"] = df_in["description"]
+                    else:
+                        str_cols = df_in.select_dtypes(include=["object"]).columns
+                        df_in["vendor_keyword"] = df_in[str_cols[0]] if len(str_cols) > 0 else "UNKNOWN_VENDOR"
+                
+                # Fallback: numeric defaults if missing in user CSV
+                if "contract_amount" not in df_in.columns:
+                    num_cols = df_in.select_dtypes(include=["number"]).columns
+                    df_in["contract_amount"] = df_in[num_cols[0]] if len(num_cols) > 0 else 0.0
+                df_in["contract_amount"] = pd.to_numeric(df_in["contract_amount"], errors="coerce").fillna(0.0)
+                
+                if "gst_rate_pct" not in df_in.columns:
+                    df_in["gst_rate_pct"] = 0.0
+                df_in["gst_rate_pct"] = pd.to_numeric(df_in["gst_rate_pct"], errors="coerce").fillna(0.0)
+                
+                if "expected_total" not in df_in.columns:
+                    df_in["expected_total"] = (df_in["contract_amount"] * (1.0 + df_in["gst_rate_pct"] / 100.0)).round(2)
+                else:
+                    df_in["expected_total"] = pd.to_numeric(df_in["expected_total"], errors="coerce").fillna(df_in["contract_amount"])
+                
+                return df_in
+
             if use_default_vendor and os.path.exists(default_vendor_csv):
-                vendor_path_to_use = default_vendor_csv
-                st.session_state["vendor_df"] = pd.read_csv(default_vendor_csv)
-            elif uploaded_vendor_csv is not None:
-                v_df = pd.read_csv(io.BytesIO(uploaded_vendor_csv.getvalue()))
+                v_df = normalize_vendor_df(pd.read_csv(default_vendor_csv, encoding="utf-8-sig"))
                 st.session_state["vendor_df"] = v_df
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tf:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as tf:
+                    v_df.to_csv(tf.name, index=False)
+                    temp_vendor_file = tf.name
+                    vendor_path_to_use = tf.name
+            elif uploaded_vendor_csv is not None:
+                v_df = normalize_vendor_df(pd.read_csv(io.BytesIO(uploaded_vendor_csv.getvalue()), encoding="utf-8-sig"))
+                st.session_state["vendor_df"] = v_df
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as tf:
                     v_df.to_csv(tf.name, index=False)
                     temp_vendor_file = tf.name
                     vendor_path_to_use = tf.name
             else:
                 st.session_state["vendor_df"] = None
-
-            # Step 3: Enrich & Audit Ledger (15-column shared data contract)
+                            # Step 3: Enrich & Audit Ledger (15-column shared data contract)
             enriched_df, enriched_meta = enrich_and_audit_ledger(
                 parsed_df,
                 parsed_meta,
@@ -810,16 +859,42 @@ with tab_b2b:
         st.markdown("##### Active Vendor Contract Master (`vendor_master.csv`)")
         st.dataframe(vendor_df, use_container_width=True, hide_index=True)
 
-        # Match ledger rows against vendor_master keywords
+        # Match ledger rows against vendor_master keywords (Universal Schema Safe)
         recon_rows = []
-        for _, v_row in vendor_df.iterrows():
-            kw = str(v_row["vendor_keyword"]).strip().upper()
-            contract_base = round(float(v_row["contract_amount"]), 2)
-            gst_pct = float(v_row["gst_rate_pct"])
-            expected_tot = round(float(v_row["expected_total"]), 2)
+        v_df_clean = vendor_df.copy()
+        v_df_clean.columns = v_df_clean.columns.astype(str).str.strip().str.lower()
+
+        for _, v_row in v_df_clean.iterrows():
+            kw_raw = v_row.get(
+                "vendor_keyword",
+                v_row.get("counterparty", v_row.get("vendor", v_row.get("vendor_name", v_row.get("description", "")))),
+            )
+            if pd.isna(kw_raw):
+                continue
+            kw = str(kw_raw).strip().upper()
+            if not kw or kw == "NAN":
+                continue
+
+            c_amt = pd.to_numeric(
+                v_row.get("contract_amount", v_row.get("amount", v_row.get("rate", v_row.get("price", 0.0)))),
+                errors="coerce",
+            )
+            contract_base = 0.0 if pd.isna(c_amt) else round(float(c_amt), 2)
+
+            g_pct = pd.to_numeric(
+                v_row.get("gst_rate_pct", v_row.get("gst", v_row.get("gst_rate", v_row.get("tax_rate", 0.0)))),
+                errors="coerce",
+            )
+            gst_pct = 0.0 if pd.isna(g_pct) else float(g_pct)
+
+            e_tot = pd.to_numeric(
+                v_row.get("expected_total", v_row.get("total", contract_base * (1.0 + gst_pct / 100.0))),
+                errors="coerce",
+            )
+            expected_tot = contract_base if pd.isna(e_tot) else round(float(e_tot), 2)
 
             matches = df_active[
-                df_active["description"].astype(str).str.upper().str.contains(kw, na=False)
+                df_active["description"].astype(str).str.upper().str.contains(kw, na=False, regex=False)
             ]
             for _, tx in matches.iterrows():
                 actual_debit = round(float(tx["debit"]), 2)
@@ -858,8 +933,6 @@ with tab_b2b:
             st.dataframe(pd.DataFrame(recon_rows), use_container_width=True, hide_index=True)
         else:
             st.info("No transactions in this statement matched the keywords in `vendor_master.csv`.")
-
-
 # ------------------------------------------------------------------------------
 # TAB 4: CASH FLOW & CATEGORY ANALYTICS
 # ------------------------------------------------------------------------------
