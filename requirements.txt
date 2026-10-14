@@ -10,3 +10,4 @@ opencv-python-headless
 reportlab
 pillow
 requests
+scikit-learn
