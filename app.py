@@ -302,7 +302,7 @@ def recalculate_metadata_from_edited_df(
 # ==============================================================================
 
 st.set_page_config(
-    page_title="FinVault Air-Gap | Forensic Bank Statement Auditor",
+    page_title="VaultSheet Air-Gap | Forensic Bank Statement Auditor",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -311,12 +311,111 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-        .block-container {
-            padding-top: 2.8rem !important;
-            padding-bottom: 2rem;
-        }
+    /* 1. Global Typography & Tabular Financial Numbers (100% Offline Safe) */
+    html, body, [class*="css"] {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+    }
+
+    /* 2. Hide Default Streamlit Chrome (Deploy Button, Footer, Top Bar) */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display: none !important;}
+
+    /* 3. Tight, Executive Page Container Padding */
+    .block-container {
+        padding-top: 1.75rem !important;
+        padding-bottom: 2.5rem !important;
+        max-width: 96% !important;
+    }
+
+    /* 4. Standardized Heading Hierarchy */
+    h1 {
+        font-size: 1.65rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.025em !important;
+        color: #F8FAFC !important;
+        margin-bottom: 0.25rem !important;
+    }
+    h2, h3, h4 {
+        font-weight: 600 !important;
+        letter-spacing: -0.015em !important;
+        color: #E2E8F0 !important;
+    }
+    h5 {
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+        color: #94A3B8 !important;
+    }
+
+    /* 5. Executive KPI Metric Cards */
+    div[data-testid="stMetric"] {
+        background: linear-gradient(180deg, #111827 0%, #0F172A 100%);
+        border: 1px solid #1E293B;
+        border-radius: 10px;
+        padding: 16px 20px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        transition: border-color 0.2s ease;
+    }
+    div[data-testid="stMetric"]:hover {
+        border-color: #334155;
+    }
+    div[data-testid="stMetricLabel"] > div {
+        font-size: 0.75rem !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
+        color: #94A3B8 !important;
+    }
+    div[data-testid="stMetricValue"] > div {
+        font-family: "Cascadia Mono", Consolas, "Courier New", monospace !important;
+        font-size: 1.45rem !important;
+        font-weight: 600 !important;
+        color: #F8FAFC !important;
+    }
+
+    /* 6. Clean Modern Navigation Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #0F172A;
+        padding: 6px;
+        border-radius: 10px;
+        border: 1px solid #1E293B;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 38px;
+        border-radius: 6px;
+        padding: 0 16px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #94A3B8;
+        border: none !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1E293B !important;
+        color: #F8FAFC !important;
+        font-weight: 600 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* 7. Sidebar Refinement & Button Polish */
+    section[data-testid="stSidebar"] {
+        background-color: #0F172A !important;
+        border-right: 1px solid #1E293B !important;
+    }
+    .stButton > button {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        font-size: 0.85rem !important;
+        padding: 0.5rem 1rem !important;
+        transition: all 0.15s ease-in-out !important;
+    }
     </style>
-""",
+    """,
     unsafe_allow_html=True,
 )
 
@@ -686,11 +785,11 @@ st.markdown("---")
 # ==============================================================================
 
 tab_ledger, tab_forensics, tab_b2b, tab_analytics, tab_export = st.tabs([
-    "📝 Interactive 15-Col Ledger",
-    "🚨 Forensic Anomalies & Hidden Fees",
-    "🏭 B2B Vendor & GST Reconciliation",
-    "📈 Cash Flow & Category Analytics",
-    "📥 Excel, TallyPrime & n8n Export",
+    "01 · Master Audit Ledger",
+    "02 · Forensic Risk & Fee Audit",
+    "03 · B2B Contract & GST Recon",
+    "04 · Cash Flow & Spend Analytics",
+    "05 · Enterprise Exports (Excel / Tally)",
 ])
 
 

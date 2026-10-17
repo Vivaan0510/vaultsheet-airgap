@@ -8,14 +8,17 @@ maxUploadSize = 500
 enableCORS = true
 enableXsrfProtection = true
 
-[browser]
-gatherUsageStats = false
-serverAddress = "127.0.0.1"
-
-[client]
-toolbarMode = "minimal"
-showErrorDetails = true
-
 [theme]
 base = "dark"
-primaryColor = "#38BDF8"
+primaryColor = "#3B82F6"          # Crisp Institutional Blue for primary buttons/accents
+backgroundColor = "#0B0F19"       # Deep Slate-Navy background
+secondaryBackgroundColor = "#111827" # Elevated Card & Sidebar surface
+textColor = "#F9FAFB"             # Crisp off-white for zero eye strain
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"           # Hides developer clutter in top-right corner
+showErrorDetails = true
+
+[browser]
+gatherUsageStats = false          # Reinforces zero-telemetry guarantee
