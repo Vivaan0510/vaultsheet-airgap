@@ -318,11 +318,13 @@ st.markdown(
         letter-spacing: -0.01em;
     }
 
-    /* 2. Hide Default Streamlit Chrome (Deploy Button, Footer, Top Bar) */
+/* 2. Hide Default Streamlit Chrome (Keep Sidebar Toggle Arrow Visible!) */
     #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
     footer {visibility: hidden;}
     .stDeployButton {display: none !important;}
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
 
     /* 3. Tight, Executive Page Container Padding */
     .block-container {
