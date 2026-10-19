@@ -310,121 +310,83 @@ def recalculate_metadata_from_edited_df(
 # 2. PAGE CONFIGURATION & CYBERSECURITY / FINTECH STYLING
 # ==============================================================================
 
-st.set_page_config(
-    page_title="VaultSheet | Simple Bank Statement to Excel & Tally",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
-
 st.markdown(
     """
     <style>
-    /* 1. Global Typography & Tabular Financial Numbers (100% Offline Safe) */
-    html, body, [class*="css"] {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: -0.01em;
-    }
+        /* ==================================================================
+           VAULTSHEET FUTURISTIC & VIBRANT FINTECH DESIGN SYSTEM
+           ================================================================== */
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-/* 2. Hide Default Streamlit Chrome (Keep Sidebar Toggle Arrow Visible!) */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stDeployButton {display: none !important;}
-    header[data-testid="stHeader"] {
-        background: transparent !important;
-    }
+        html, body, [class*="css"] {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+            font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+        }
 
-    /* 3. Tight, Executive Page Container Padding */
-    .block-container {
-        padding-top: 1.75rem !important;
-        padding-bottom: 2.5rem !important;
-        max-width: 96% !important;
-    }
+        /* Hide Streamlit Chrome */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display: none !important;}
+        header[data-testid="stHeader"] { background: transparent !important; }
 
-    /* 4. Standardized Heading Hierarchy */
-    h1 {
-        font-size: 1.65rem !important;
-        font-weight: 700 !important;
-        letter-spacing: -0.025em !important;
-        color: #F8FAFC !important;
-        margin-bottom: 0.25rem !important;
-    }
-    h2, h3, h4 {
-        font-weight: 600 !important;
-        letter-spacing: -0.015em !important;
-        color: #E2E8F0 !important;
-    }
-    h5 {
-        font-size: 0.85rem !important;
-        font-weight: 600 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.05em !important;
-        color: #94A3B8 !important;
-    }
+        /* Futuristic Frosted Glass Cards */
+        div[data-testid="metric-container"], .stMetric, div.css-1r6slb0, div[data-testid="stVerticalBlock"] > div > div.element-container {
+            border-radius: 14px;
+        }
 
-    /* 5. Executive KPI Metric Cards */
-    div[data-testid="stMetric"] {
-        background: linear-gradient(180deg, #111827 0%, #0F172A 100%);
-        border: 1px solid #1E293B;
-        border-radius: 10px;
-        padding: 16px 20px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-        transition: border-color 0.2s ease;
-    }
-    div[data-testid="stMetric"]:hover {
-        border-color: #334155;
-    }
-    div[data-testid="stMetricLabel"] > div {
-        font-size: 0.75rem !important;
-        font-weight: 600 !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.06em !important;
-        color: #94A3B8 !important;
-    }
-    div[data-testid="stMetricValue"] > div {
-        font-family: "Cascadia Mono", Consolas, "Courier New", monospace !important;
-        font-size: 1.45rem !important;
-        font-weight: 600 !important;
-        color: #F8FAFC !important;
-    }
+        /* Vibrant Glow Buttons */
+        .stButton > button, .stDownloadButton > button {
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+            letter-spacing: -0.01em !important;
+            transition: all 0.2s ease-in-out !important;
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.25);
+        }
+        .stButton > button:hover, .stDownloadButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
 
-    /* 6. Clean Modern Navigation Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: #0F172A;
-        padding: 6px;
-        border-radius: 10px;
-        border: 1px solid #1E293B;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 38px;
-        border-radius: 6px;
-        padding: 0 16px;
-        font-size: 0.85rem;
-        font-weight: 500;
-        color: #94A3B8;
-        border: none !important;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1E293B !important;
-        color: #F8FAFC !important;
-        font-weight: 600 !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-    }
+        /* Glowing Primary CTA Button */
+        button[kind="primary"] {
+            background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            color: #FFFFFF !important;
+        }
 
-    /* 7. Sidebar Refinement & Button Polish */
-    section[data-testid="stSidebar"] {
-        background-color: #0F172A !important;
-        border-right: 1px solid #1E293B !important;
-    }
-    .stButton > button {
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-        font-size: 0.85rem !important;
-        padding: 0.5rem 1rem !important;
-        transition: all 0.15s ease-in-out !important;
-    }
+        /* Modernized DataFrames & Tables */
+        dataframe, .stDataFrame {
+            border-radius: 12px !important;
+            overflow: hidden !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+
+        /* Custom Input Fields & Search Bars */
+        .stTextInput input {
+            background-color: rgba(15, 23, 42, 0.6) !important;
+            border: 1px solid rgba(59, 130, 246, 0.3) !important;
+            border-radius: 10px !important;
+            color: #F8FAFC !important;
+            font-weight: 500 !important;
+        }
+        .stTextInput input:focus {
+            border-color: #3B82F6 !important;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+        }
+
+        /* Glowing Status Pills & Badges */
+        .vibrant-badge {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2));
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            color: #60A5FA;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            display: inline-block;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
+        }
     </style>
     """,
     unsafe_allow_html=True,
@@ -668,16 +630,17 @@ if run_btn and raw_pdf_bytes is not None:
 # ==============================================================================
 st.markdown(
     """
-    <div style="text-align: center; padding: 10px 0 18px 0;">
-        <span style="background: rgba(59, 130, 246, 0.15); color: #60A5FA; font-size: 0.75rem; 
-                     font-weight: 600; padding: 4px 12px; border-radius: 999px;">
-            🔒 100% PRIVATE & OFFLINE
-        </span>
-        <h1 style="margin: 10px 0 4px 0; font-size: 1.85rem; color: #F8FAFC;">
-            VaultSheet — Bank PDF to Clean Excel & Tally
+    <div style="background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #0F172A 100%); 
+                border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 20px; padding: 28px 32px; margin-bottom: 20px;
+                box-shadow: 0 10px 30px -10px rgba(79, 70, 229, 0.3);">
+        <div style="margin-bottom: 10px;">
+            <span class="vibrant-badge">⚡ SECURE AIR-GAPPED WORKSTATION</span>
+        </div>
+        <h1 style="margin: 0 0 8px 0; font-size: 2.1rem; font-weight: 800; color: #F8FAFC; letter-spacing: -0.03em;">
+            VaultSheet <span style="background: linear-gradient(135deg, #60A5FA, #A78BFA); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Financial Intelligence</span>
         </h1>
-        <p style="margin: 0; color: #94A3B8; font-size: 0.95rem;">
-            Drop your bank statement below. It converts and checks for errors automatically in one step.
+        <p style="margin: 0; color: #94A3B8; font-size: 1.05rem; font-weight: 400; line-height: 1.5;">
+            Transform raw bank PDFs into pristine Excel workbooks, catch anomalies instantly, and bridge straight to TallyPrime with zero cloud exposure.
         </p>
     </div>
     """,
