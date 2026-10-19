@@ -21,6 +21,7 @@ import re
 import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -31,6 +32,9 @@ import streamlit as st
 # ==============================================================================
 from parser_engine import parse_bank_pdf
 from categorizer_and_auditor import enrich_and_audit_ledger
+
+TEST_DIR = Path(__file__).resolve().parent / "test_statements"
+
 try:
     from excel_exporter import export_to_excel
 except ImportError:
@@ -696,36 +700,51 @@ if st.session_state["audit_df"] is None or st.session_state["audit_meta"] is Non
         with demo_col:
             try_demo = st.button("⚡ Try Instant Sample Statement", type="primary", use_container_width=True)
 
-        # Zero-click auto-run the moment a user drops a file or clicks the sample button!
+        # Zero-click auto-run with a BULLETPROOF Safety Net!
         if quick_pdf is not None or try_demo:
             with st.spinner("Converting PDF & checking balances automatically..."):
-                if quick_pdf is not None:
-                    pdf_bytes = quick_pdf.getvalue()
-                    fname = quick_pdf.name
-                else:
-                    sample_p = os.path.join(".", "test_statements", "bank_1_borderless.pdf")
-                    if not os.path.exists(sample_p):
-                        st.error("Sample statement not found. Run `python generate_test_pdfs.py` first.")
+                try:
+                    if quick_pdf is not None:
+                        pdf_bytes = quick_pdf.getvalue()
+                        fname = quick_pdf.name
+                    else:
+                        sample_p = TEST_DIR / "bank_1_borderless.pdf"
+                        if not sample_p.exists():
+                            st.error(
+                                "Sample statement is missing. Generate the test PDFs with "
+                                "`python generate_test_pdfs.py`, then try again."
+                            )
+                            st.stop()
+                        pdf_bytes = sample_p.read_bytes()
+                        fname = sample_p.name
+
+                    pw_clean = quick_pw.strip() if quick_pw and quick_pw.strip() else None
+                    
+                    # Run the extraction engines
+                    p_df, p_meta = parse_bank_pdf(pdf_bytes, password=pw_clean)
+                    v_path = default_vendor_csv if os.path.exists(default_vendor_csv) else None
+                    a_df, a_meta = enrich_and_audit_ledger(
+                        p_df,
+                        p_meta,
+                        vendor_csv_path=v_path,
+                    )
+
+                    # Check if the result is completely empty
+                    if a_df is None or a_df.empty:
+                        st.error("⚠️ We couldn't find any valid transactions in this PDF. Please ensure it is a proper Bank Statement.")
                         st.stop()
-                    with open(sample_p, "rb") as sample_file:
-                        pdf_bytes = sample_file.read()
-                    fname = os.path.basename(sample_p)
 
-                pw_clean = quick_pw.strip() if quick_pw and quick_pw.strip() else None
-                p_df, p_meta = parse_bank_pdf(pdf_bytes, password=pw_clean)
-                v_path = default_vendor_csv if use_default_vendor and os.path.exists(default_vendor_csv) else None
-                a_df, a_meta = enrich_and_audit_ledger(
-                    p_df,
-                    p_meta,
-                    vendor_csv_path=v_path,
-                    use_local_llm=use_local_llm,
-                )
+                    st.session_state["audit_df"] = a_df
+                    st.session_state["audit_meta"] = a_meta
+                    st.session_state["active_source_name"] = fname
+                    st.rerun()
 
-                st.session_state["audit_df"] = a_df
-                st.session_state["audit_meta"] = a_meta
-                st.session_state["active_source_name"] = fname
-                st.rerun()
-    st.stop()
+                except Exception as e:
+                    # If anything crashes (wrong password, corrupted file, missing columns), catch it smoothly!
+                    st.error("⚠️ **Could not process this file.**")
+                    st.warning(f"**Reason:** {str(e)}")
+                    st.info("💡 **Fixes:** Check if the PDF is password-protected, corrupted, or not a bank statement.")
+                    st.stop()
 
 # 2. Once Loaded -> Show Top-Bar Instant Downloads + AI Search + Reset Button
 df_curr = st.session_state["audit_df"]
@@ -735,7 +754,10 @@ stem_curr = os.path.splitext(os.path.basename(fname_curr))[0]
 
 top_c1, top_c2, top_c3 = st.columns([2.2, 2.2, 1.2])
 with top_c1:
-    excel_bytes_quick = export_to_excel(df_curr, meta_curr)
+    tmp_xlsx = Path(tempfile.gettempdir()) / f"{stem_curr}_VaultSheet.xlsx"
+    export_to_excel(df_curr, meta_curr, str(tmp_xlsx))
+    excel_bytes_quick = tmp_xlsx.read_bytes()
+    tmp_xlsx.unlink(missing_ok=True)
     st.download_button(
         "📥 Download Clean Excel (.xlsx)",
         data=excel_bytes_quick,
@@ -745,7 +767,7 @@ with top_c1:
         use_container_width=True,
     )
 with top_c2:
-    tally_xml_quick = generate_tally_xml_bytes(df_curr, bank_ledger_name=bank_ledger_name)
+    tally_xml_quick = generate_tally_xml_bytes(df_curr)
     st.download_button(
         "📥 Download TallyPrime (.xml)",
         data=tally_xml_quick,
@@ -791,22 +813,47 @@ if q4.button("📋 Show All Transactions", use_container_width=True):
 if ai_query.strip():
     q_low = ai_query.lower().strip()
     res_df = df_curr.copy()
+    
+    # Helper to safely compute total transaction amount across common column variations
+    def get_total_amount_series(data_df):
+        cols_lower = {str(c).lower().strip(): c for c in data_df.columns}
+        total_amt = pd.Series(0.0, index=data_df.index)
+        found_any = False
+        
+        for name in ["debit", "withdrawal", "withdrawals", "dr"]:
+            if name in cols_lower:
+                total_amt += pd.to_numeric(data_df[cols_lower[name]], errors="coerce").fillna(0).abs()
+                found_any = True
+                
+        for name in ["credit", "deposit", "deposits", "cr"]:
+            if name in cols_lower:
+                total_amt += pd.to_numeric(data_df[cols_lower[name]], errors="coerce").fillna(0).abs()
+                found_any = True
+                
+        if not found_any and "amount" in cols_lower:
+            total_amt = pd.to_numeric(data_df[cols_lower["amount"]], errors="coerce").fillna(0).abs()
+            
+        return total_amt
+
     amt_up = re.search(r"(?:above|over|greater than|more than|>)\s*(?:rs\.?|inr|₹)?\s*([\d,]+)", q_low)
     amt_dn = re.search(r"(?:below|under|less than|<)\s*(?:rs\.?|inr|₹)?\s*([\d,]+)", q_low)
 
     if amt_up:
         limit_val = float(amt_up.group(1).replace(",", ""))
-        res_df = res_df[(res_df["Debit"].fillna(0) + res_df["Credit"].fillna(0)) >= limit_val]
+        tot_a = get_total_amount_series(res_df)
+        res_df = res_df[tot_a >= limit_val]
     elif amt_dn:
         limit_val = float(amt_dn.group(1).replace(",", ""))
-        tot_a = res_df["Debit"].fillna(0) + res_df["Credit"].fillna(0)
+        tot_a = get_total_amount_series(res_df)
         res_df = res_df[(tot_a > 0) & (tot_a <= limit_val)]
     elif any(w in q_low for w in ["fee", "charge", "penalty", "hidden", "interest"]):
         m = res_df.astype(str).apply(lambda x: x.str.contains("fee|charge|penal|chrg|sms|maint", case=False, na=False)).any(axis=1)
         res_df = res_df[m]
     elif any(w in q_low for w in ["duplicate", "double", "twice", "anomaly", "risk", "flag", "suspicious"]):
-        if "Anomaly_Flag" in res_df.columns:
-            res_df = res_df[res_df["Anomaly_Flag"].astype(str).str.strip() != ""]
+        cols_lower = {str(c).lower().strip(): c for c in res_df.columns}
+        if "anomaly_flag" in cols_lower:
+            target_col = cols_lower["anomaly_flag"]
+            res_df = res_df[res_df[target_col].astype(str).str.strip().ne("") & res_df[target_col].notna()]
     else:
         m = res_df.astype(str).apply(lambda x: x.str.contains(re.escape(q_low), case=False, na=False)).any(axis=1)
         res_df = res_df[m]
