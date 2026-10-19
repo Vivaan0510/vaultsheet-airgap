@@ -17,6 +17,7 @@ import gc
 import io
 import json
 import os
+import re
 import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -302,10 +303,10 @@ def recalculate_metadata_from_edited_df(
 # ==============================================================================
 
 st.set_page_config(
-    page_title="VaultSheet Air-Gap | Forensic Bank Statement Auditor",
+    page_title="VaultSheet | Simple Bank Statement to Excel & Tally",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown(
@@ -655,53 +656,163 @@ if run_btn and raw_pdf_bytes is not None:
 
 
 # ==============================================================================
-# 6. MAIN HEADER & CYBERSECURITY TELEMETRY BANNER
+# ULTRA-MINIMAL 1-CLICK WORKSPACE (DESIGNED FOR FIRST-TIME USERS)
 # ==============================================================================
-
 st.markdown(
     """
-    <div class="security-banner">
-        <span class="security-badge">AIR-GAPPED</span>
-        <span class="security-badge">RAM-ONLY DECRYPTION</span>
-        <span class="security-badge">OFFLINE RAPID-OCR</span>
-        <strong>FinVault Forensic Accounting Workstation</strong> — Zero-retention PDF extraction,
-        self-healing balance verification, B2B GST contract reconciliation, and TallyPrime bridge.
+    <div style="text-align: center; padding: 10px 0 18px 0;">
+        <span style="background: rgba(59, 130, 246, 0.15); color: #60A5FA; font-size: 0.75rem; 
+                     font-weight: 600; padding: 4px 12px; border-radius: 999px;">
+            🔒 100% PRIVATE & OFFLINE
+        </span>
+        <h1 style="margin: 10px 0 4px 0; font-size: 1.85rem; color: #F8FAFC;">
+            VaultSheet — Bank PDF to Clean Excel & Tally
+        </h1>
+        <p style="margin: 0; color: #94A3B8; font-size: 0.95rem;">
+            Drop your bank statement below. It converts and checks for errors automatically in one step.
+        </p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
+# 1. If NO statement is loaded yet -> Show ONLY a clean centered Dropzone + 1-Click Demo Button
 if st.session_state["audit_df"] is None or st.session_state["audit_meta"] is None:
-    st.info(
-        "👈 **Select a synthetic statement from `./test_statements/` or upload a bank PDF in the sidebar**, "
-        "then click **Run Forensic Audit Pipeline** to begin."
-    )
+    _, center_col, _ = st.columns([1, 2.2, 1])
+    with center_col:
+        quick_pdf = st.file_uploader(
+            "📄 Drop your Bank Statement PDF here",
+            type=["pdf"],
+            key="minimal_home_uploader",
+        )
+        pw_col, demo_col = st.columns([1.2, 1])
+        with pw_col:
+            quick_pw = st.text_input(
+                "PDF Password (only if locked)",
+                type="password",
+                placeholder="PDF Password (optional)",
+                label_visibility="collapsed",
+            )
+        with demo_col:
+            try_demo = st.button("⚡ Try Instant Sample Statement", type="primary", use_container_width=True)
 
-    # Display quick architecture & QA test guide when idle
-    col_g1, col_g2, col_g3 = st.columns(3)
-    with col_g1:
-        st.markdown("#### 📄 3-Mode Extraction Engine")
-        st.markdown(
-            "- **Mode A (`native_grid`):** Vector grid table parser with wrapped cell stitching.\n"
-            "- **Mode B (`native_stream`):** Horizontal Y-coordinate clustering for borderless PDFs.\n"
-            "- **Mode C (`offline_ocr`):** 200 DPI `pypdfium2` + `RapidOCR` for scanned image PDFs."
-        )
-    with col_g2:
-        st.markdown("#### 🔍 6-Rule Forensic Auditor")
-        st.markdown(
-            "- **Rule 1:** Running-balance math verification & debit/credit swap healing.\n"
-            "- **Rule 2 & 3:** Same-day duplicate debit trap & hidden bank fee detector.\n"
-            "- **Rule 4, 5 & 6:** 2.5σ outlier, round-sum outflow & B2B contract/GST reconciliation."
-        )
-    with col_g3:
-        st.markdown("#### 🧾 TallyPrime & n8n Ready")
-        st.markdown(
-            "- Interactive 15-column data editor with instant running-balance recalculation.\n"
-            "- One-click multi-sheet **Excel Workbook** (`export_to_excel`) in RAM.\n"
-            "- Direct **TallyPrime XML Voucher** & **n8n JSON Payload** downloads."
-        )
+        # Zero-click auto-run the moment a user drops a file or clicks the sample button!
+        if quick_pdf is not None or try_demo:
+            with st.spinner("Converting PDF & checking balances automatically..."):
+                if quick_pdf is not None:
+                    pdf_bytes = quick_pdf.getvalue()
+                    fname = quick_pdf.name
+                else:
+                    sample_p = os.path.join(".", "test_statements", "bank_1_borderless.pdf")
+                    if not os.path.exists(sample_p):
+                        st.error("Sample statement not found. Run `python generate_test_pdfs.py` first.")
+                        st.stop()
+                    with open(sample_p, "rb") as sample_file:
+                        pdf_bytes = sample_file.read()
+                    fname = os.path.basename(sample_p)
+
+                pw_clean = quick_pw.strip() if quick_pw and quick_pw.strip() else None
+                p_df, p_meta = parse_bank_pdf(pdf_bytes, password=pw_clean)
+                v_path = default_vendor_csv if use_default_vendor and os.path.exists(default_vendor_csv) else None
+                a_df, a_meta = enrich_and_audit_ledger(
+                    p_df,
+                    p_meta,
+                    vendor_csv_path=v_path,
+                    use_local_llm=use_local_llm,
+                )
+
+                st.session_state["audit_df"] = a_df
+                st.session_state["audit_meta"] = a_meta
+                st.session_state["active_source_name"] = fname
+                st.rerun()
     st.stop()
 
+# 2. Once Loaded -> Show Top-Bar Instant Downloads + AI Search + Reset Button
+df_curr = st.session_state["audit_df"]
+meta_curr = st.session_state["audit_meta"]
+fname_curr = st.session_state.get("active_source_name") or "statement.pdf"
+stem_curr = os.path.splitext(os.path.basename(fname_curr))[0]
+
+top_c1, top_c2, top_c3 = st.columns([2.2, 2.2, 1.2])
+with top_c1:
+    excel_bytes_quick = export_to_excel(df_curr, meta_curr)
+    st.download_button(
+        "📥 Download Clean Excel (.xlsx)",
+        data=excel_bytes_quick,
+        file_name=f"{stem_curr}_VaultSheet.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary",
+        use_container_width=True,
+    )
+with top_c2:
+    tally_xml_quick = generate_tally_xml_bytes(df_curr, bank_ledger_name=bank_ledger_name)
+    st.download_button(
+        "📥 Download TallyPrime (.xml)",
+        data=tally_xml_quick,
+        file_name=f"{stem_curr}_Tally.xml",
+        mime="application/xml",
+        use_container_width=True,
+    )
+with top_c3:
+    if st.button("🔄 Upload Another PDF", use_container_width=True):
+        st.session_state["audit_df"] = None
+        st.session_state["audit_meta"] = None
+        st.session_state["smart_search_query"] = ""
+        st.rerun()
+
+# 3. Front-and-Center AI Smart Search Bar (1-Click Pills + Plain English Input)
+s_col1, s_col2 = st.columns([6, 1])
+with s_col1:
+    ai_query = st.text_input(
+        "AI Search",
+        value=st.session_state.get("smart_search_query", ""),
+        placeholder="🔍 Ask AI or search transactions: 'Above 50000', 'Hidden bank charges', 'Duplicate payments', or party name...",
+        label_visibility="collapsed",
+    )
+with s_col2:
+    if st.button("Clear", use_container_width=True):
+        st.session_state["smart_search_query"] = ""
+        st.rerun()
+
+q1, q2, q3, q4 = st.columns(4)
+if q1.button("🔍 High-Value (> ₹50,000)", use_container_width=True):
+    st.session_state["smart_search_query"] = "transactions above 50000"
+    st.rerun()
+if q2.button("⚠️ Hidden Bank Charges", use_container_width=True):
+    st.session_state["smart_search_query"] = "show bank fees and charges"
+    st.rerun()
+if q3.button("🔁 Duplicate / Suspicious", use_container_width=True):
+    st.session_state["smart_search_query"] = "show duplicate payments"
+    st.rerun()
+if q4.button("📋 Show All Transactions", use_container_width=True):
+    st.session_state["smart_search_query"] = ""
+    st.rerun()
+
+if ai_query.strip():
+    q_low = ai_query.lower().strip()
+    res_df = df_curr.copy()
+    amt_up = re.search(r"(?:above|over|greater than|more than|>)\s*(?:rs\.?|inr|₹)?\s*([\d,]+)", q_low)
+    amt_dn = re.search(r"(?:below|under|less than|<)\s*(?:rs\.?|inr|₹)?\s*([\d,]+)", q_low)
+
+    if amt_up:
+        limit_val = float(amt_up.group(1).replace(",", ""))
+        res_df = res_df[(res_df["Debit"].fillna(0) + res_df["Credit"].fillna(0)) >= limit_val]
+    elif amt_dn:
+        limit_val = float(amt_dn.group(1).replace(",", ""))
+        tot_a = res_df["Debit"].fillna(0) + res_df["Credit"].fillna(0)
+        res_df = res_df[(tot_a > 0) & (tot_a <= limit_val)]
+    elif any(w in q_low for w in ["fee", "charge", "penalty", "hidden", "interest"]):
+        m = res_df.astype(str).apply(lambda x: x.str.contains("fee|charge|penal|chrg|sms|maint", case=False, na=False)).any(axis=1)
+        res_df = res_df[m]
+    elif any(w in q_low for w in ["duplicate", "double", "twice", "anomaly", "risk", "flag", "suspicious"]):
+        if "Anomaly_Flag" in res_df.columns:
+            res_df = res_df[res_df["Anomaly_Flag"].astype(str).str.strip() != ""]
+    else:
+        m = res_df.astype(str).apply(lambda x: x.str.contains(re.escape(q_low), case=False, na=False)).any(axis=1)
+        res_df = res_df[m]
+
+    st.success(f"Found **{len(res_df)}** matching transaction(s) for **'{ai_query}'**:")
+    st.dataframe(res_df, use_container_width=True, height=280)
 
 # ==============================================================================
 # 7. EXECUTIVE KPI DASHBOARD (14 SHARED METADATA KEYS)
