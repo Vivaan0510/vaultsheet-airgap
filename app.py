@@ -32,6 +32,10 @@ import streamlit as st
 # ==============================================================================
 from parser_engine import parse_bank_pdf
 from categorizer_and_auditor import enrich_and_audit_ledger
+try:
+    from generate_test_pdfs import generate_all_test_pdfs
+except ImportError:
+    generate_all_test_pdfs = None
 
 TEST_DIR = Path(__file__).resolve().parent / "test_statements"
 
@@ -682,69 +686,71 @@ st.markdown(
 
 # 1. If NO statement is loaded yet -> Show ONLY a clean centered Dropzone + 1-Click Demo Button
 if st.session_state["audit_df"] is None or st.session_state["audit_meta"] is None:
-    _, center_col, _ = st.columns([1, 2.2, 1])
-    with center_col:
-        quick_pdf = st.file_uploader(
-            "📄 Drop your Bank Statement PDF here",
-            type=["pdf"],
-            key="minimal_home_uploader",
-        )
-        pw_col, demo_col = st.columns([1.2, 1])
-        with pw_col:
-            quick_pw = st.text_input(
-                "PDF Password (only if locked)",
-                type="password",
-                placeholder="PDF Password (optional)",
-                label_visibility="collapsed",
-            )
-        with demo_col:
-            try_demo = st.button("⚡ Try Instant Sample Statement", type="primary", use_container_width=True)
-
-        # Zero-click auto-run with a BULLETPROOF Safety Net!
-        if quick_pdf is not None or try_demo:
-            with st.spinner("Converting PDF & checking balances automatically..."):
-                try:
-                    if quick_pdf is not None:
-                        pdf_bytes = quick_pdf.getvalue()
-                        fname = quick_pdf.name
-                    else:
-                        sample_p = TEST_DIR / "bank_1_borderless.pdf"
-                        if not sample_p.exists():
-                            st.error(
-                                "Sample statement is missing. Generate the test PDFs with "
-                                "`python generate_test_pdfs.py`, then try again."
-                            )
-                            st.stop()
-                        pdf_bytes = sample_p.read_bytes()
-                        fname = sample_p.name
-
-                    pw_clean = quick_pw.strip() if quick_pw and quick_pw.strip() else None
-                    
-                    # Run the extraction engines
-                    p_df, p_meta = parse_bank_pdf(pdf_bytes, password=pw_clean)
-                    v_path = default_vendor_csv if os.path.exists(default_vendor_csv) else None
-                    a_df, a_meta = enrich_and_audit_ledger(
-                        p_df,
-                        p_meta,
-                        vendor_csv_path=v_path,
+            _, center_col, _ = st.columns([1, 2.2, 1])
+            with center_col:
+                quick_pdf = st.file_uploader(
+                    "📄 Drop your Bank Statement PDF here",
+                    type=["pdf"],
+                    key="minimal_home_uploader",
+                )
+                pw_col, demo_col = st.columns([1.2, 1])
+                with pw_col:
+                    quick_pw = st.text_input(
+                        "PDF Password (optional)",
+                        type="password",
+                        placeholder="PDF Password (optional)",
+                        label_visibility="collapsed",
                     )
+                with demo_col:
+                    try_demo = st.button("⚡ Try Instant Sample Statement", type="primary", use_container_width=True)
 
-                    # Check if the result is completely empty
-                    if a_df is None or a_df.empty:
-                        st.error("⚠️ We couldn't find any valid transactions in this PDF. Please ensure it is a proper Bank Statement.")
-                        st.stop()
+                # Zero-click auto-run with a BULLETPROOF Safety Net!
+                if quick_pdf is not None or try_demo:
+                    with st.spinner("Converting PDF & checking balances automatically..."):
+                        try:
+                            if quick_pdf is not None:
+                                pdf_bytes = quick_pdf.getvalue()
+                                fname = quick_pdf.name
+                            else:
+                                sample_p = TEST_DIR / "bank_1_borderless.pdf"
+                                if not sample_p.exists() and 'generate_all_test_pdfs' in globals():
+                                    try:
+                                        generate_all_test_pdfs(str(TEST_DIR))
+                                    except Exception:
+                                        pass
+                                pdf_bytes = sample_p.read_bytes()
+                                fname = sample_p.name
 
-                    st.session_state["audit_df"] = a_df
-                    st.session_state["audit_meta"] = a_meta
-                    st.session_state["active_source_name"] = fname
-                    st.rerun()
+                            pw_clean = quick_pw.strip() if quick_pw and quick_pw.strip() else None
+                            
+                            p_df, p_meta = parse_bank_pdf(pdf_bytes, password=pw_clean)
+                            v_path = default_vendor_csv if os.path.exists(default_vendor_csv) else None
+                            a_df, a_meta = enrich_and_audit_ledger(
+                                p_df,
+                                p_meta,
+                                vendor_csv_path=v_path,
+                                use_local_llm=use_local_llm,
+                            )
 
-                except Exception as e:
-                    # If anything crashes (wrong password, corrupted file, missing columns), catch it smoothly!
-                    st.error("⚠️ **Could not process this file.**")
-                    st.warning(f"**Reason:** {str(e)}")
-                    st.info("💡 **Fixes:** Check if the PDF is password-protected, corrupted, or not a bank statement.")
-                    st.stop()
+                            if a_df is None or a_df.empty:
+                                st.error("⚠️ We couldn't find any valid transactions in this PDF. Please ensure it is a proper Bank Statement.")
+                                st.stop()
+
+                            st.session_state["audit_df"] = a_df
+                            st.session_state["audit_meta"] = a_meta
+                            st.session_state["active_source_name"] = fname
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error("⚠️ **Could not process this file.**")
+                            st.warning(f"**Reason:** {str(e)}")
+                            st.info("💡 **Fixes:** Check if the PDF is password-protected, corrupted, or not a bank statement.")
+                            st.stop()
+            
+            st.stop()
+            
+            # 🛑 CRITICAL: Stop execution here so it never reaches line 758 when no file is loaded!
+            st.stop()
 
 # 2. Once Loaded -> Show Top-Bar Instant Downloads + AI Search + Reset Button
 df_curr = st.session_state["audit_df"]
