@@ -968,14 +968,21 @@ methods_used = (
 unverified_list = meta_active.get("unverified_row_ids", [])
 unverified_str = "None (100% Verified)" if not unverified_list else f"Rows {unverified_list}"
 
+cols_lower_map = {str(c).lower().strip(): c for c in df_active.columns}
+deb_c = cols_lower_map.get("debit", cols_lower_map.get("withdrawal", None))
+cred_c = cols_lower_map.get("credit", cols_lower_map.get("deposit", None))
+
+deb_series = pd.to_numeric(df_active[deb_c], errors="coerce").fillna(0).abs() if deb_c else pd.Series(0.0, index=df_active.index)
+cred_series = pd.to_numeric(df_active[cred_c], errors="coerce").fillna(0).abs() if cred_c else pd.Series(0.0, index=df_active.index)
+
 open_bal = float(meta_active.get("opening_balance", 0.0) or 0.0)
-tot_cred = float(meta_active.get("total_credits", 0.0) or 0.0)
-tot_deb = float(meta_active.get("total_debits", 0.0) or 0.0)
+tot_cred = float(meta_active.get("total_credits", 0.0) or cred_series.sum())
+tot_deb = float(meta_active.get("total_debits", 0.0) or deb_series.sum())
 close_bal = float(meta_active.get("closing_balance", 0.0) or 0.0)
 net_flow = close_bal - open_bal
 
-cred_cnt = int(meta_active.get("credit_count", int((df_active.get("credit", pd.Series(dtype=float)) > 0).sum())))
-deb_cnt = int(meta_active.get("debit_count", int((df_active.get("debit", pd.Series(dtype=float)) > 0).sum())))
+cred_cnt = int((cred_series > 0).sum())
+deb_cnt = int((deb_series > 0).sum())
 
 burn_rate = float(meta_active.get("daily_burn_rate", 0.0) or 0.0)
 runway_days = float(meta_active.get("estimated_cash_runway_days", 0.0) or 0.0)
@@ -984,177 +991,43 @@ anom_cnt = int(meta_active.get("anomaly_count", 0) or 0)
 hidden_fees = float(meta_active.get("hidden_fees_total", 0.0) or 0.0)
 ocr_pages = int(meta_active.get("ocr_page_count", 0) or 0)
 
-st.markdown(
-    f"""
-    <style>
-        .pulse-board {{
-            background: linear-gradient(145deg, #0B1221 0%, #090E1A 100%);
-            border: 1px solid rgba(56, 189, 248, 0.16);
-            border-radius: 20px;
-            padding: 32px 36px 26px 36px;
-            margin: 18px 0 28px 0;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-        }}
-        .pulse-pill {{
-            display: inline-block;
-            background: rgba(14, 116, 144, 0.28);
-            border: 1px solid rgba(56, 189, 248, 0.35);
-            color: #38BDF8;
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            padding: 5px 14px;
-            border-radius: 999px;
-            margin-bottom: 14px;
-        }}
-        .pulse-title {{
-            color: #F8FAFC;
-            font-size: 2.15rem;
-            font-weight: 800;
-            letter-spacing: -0.025em;
-            margin: 0 0 8px 0;
-            line-height: 1.2;
-        }}
-        .pulse-subtitle {{
-            color: #94A3B8;
-            font-size: 0.95rem;
-            font-weight: 400;
-            margin: 0 0 26px 0;
-            line-height: 1.5;
-        }}
-        .pulse-grid {{
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
-            margin-bottom: 16px;
-        }}
-        @media (max-width: 1100px) {{
-            .pulse-grid {{ grid-template-columns: repeat(2, 1fr); }}
-        }}
-        .pulse-card {{
-            background: rgba(15, 23, 42, 0.65);
-            border: 1px solid rgba(148, 163, 184, 0.12);
-            border-radius: 14px;
-            padding: 20px 22px;
-            transition: all 0.2s ease;
-        }}
-        .pulse-card:hover {{
-            border-color: rgba(56, 189, 248, 0.35);
-            background: rgba(15, 23, 42, 0.9);
-            transform: translateY(-2px);
-        }}
-        .pulse-label {{
-            color: #94A3B8;
-            font-size: 0.72rem;
-            font-weight: 600;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-        }}
-        .pulse-val-blue {{
-            color: #38BDF8;
-            font-size: 1.65rem;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            margin-bottom: 8px;
-            white-space: nowrap;
-        }}
-        .pulse-val-red {{
-            color: #F87171;
-            font-size: 1.65rem;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            margin-bottom: 8px;
-            white-space: nowrap;
-        }}
-        .pulse-sub-green {{
-            color: #34D399;
-            font-size: 0.78rem;
-            font-weight: 500;
-        }}
-        .pulse-sub-amber {{
-            color: #FBBF24;
-            font-size: 0.78rem;
-            font-weight: 500;
-        }}
-        .pulse-footer {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-top: 1px solid rgba(148, 163, 184, 0.12);
-            padding-top: 16px;
-            margin-top: 12px;
-            color: #64748B;
-            font-size: 0.78rem;
-        }}
-    </style>
-
-    <div class="pulse-board">
-        <div class="pulse-pill">SLIDE 01 • EXECUTIVE TELEMETRY OVERVIEW</div>
-        <div class="pulse-title">Executive Financial & Forensic Audit — {src_name}</div>
-        <div class="pulse-subtitle">
-            Office of the CFO • VaultSheet Autonomous Studio • Mode: <strong style="color:#38BDF8;">{methods_used}</strong>
-            • Total Transactions: <strong style="color:#34D399;">{len(df_active)}</strong>
-            • Offline OCR Pages: <strong>{ocr_pages}</strong>
-            • Unverified Rows: <strong style="color:#34D399;">{unverified_str}</strong>
-        </div>
-
-        <div class="pulse-grid">
-            <div class="pulse-card">
-                <div class="pulse-label">OPENING BALANCE</div>
-                <div class="pulse-val-blue">₹{open_bal:,.2f}</div>
-                <div class="pulse-sub-green">✓ Verified Starting Anchor</div>
-            </div>
-            <div class="pulse-card">
-                <div class="pulse-label">TOTAL CREDITS (+)</div>
-                <div class="pulse-val-blue">₹{tot_cred:,.2f}</div>
-                <div class="pulse-sub-green">↑ {cred_cnt} Inflow Transactions</div>
-            </div>
-            <div class="pulse-card">
-                <div class="pulse-label">TOTAL DEBITS (-)</div>
-                <div class="pulse-val-blue">₹{tot_deb:,.2f}</div>
-                <div class="pulse-sub-green">↓ {deb_cnt} Outflow Transactions</div>
-            </div>
-            <div class="pulse-card">
-                <div class="pulse-label">CLOSING BALANCE</div>
-                <div class="pulse-val-blue">₹{close_bal:,.2f}</div>
-                <div class="pulse-sub-green">Net Flow: ₹{net_flow:+,.2f}</div>
-            </div>
-        </div>
-
-        <div class="pulse-grid">
-            <div class="pulse-card">
-                <div class="pulse-label">DAILY BURN RATE</div>
-                <div class="pulse-val-blue">₹{burn_rate:,.2f}</div>
-                <div class="pulse-sub-green">Mean Daily Operating Outflow</div>
-            </div>
-            <div class="pulse-card">
-                <div class="pulse-label">ESTIMATED CASH RUNWAY</div>
-                <div class="pulse-val-blue">{runway_days:.1f} Days</div>
-                <div class="pulse-sub-green">✓ Healthy Liquidity Buffer</div>
-            </div>
-            <div class="pulse-card">
-                <div class="pulse-label">MATH VERIFICATION RATE</div>
-                <div class="pulse-val-blue">{math_rate:.1f}%</div>
-                <div class="pulse-sub-green">✓ 100% Ledger Continuity Verified</div>
-            </div>
-            <div class="pulse-card">
-                <div class="pulse-label">FORENSIC RISK EXPOSURE</div>
-                <div class="pulse-val-red">{anom_cnt} Rows</div>
-                <div class="pulse-sub-amber">₹{hidden_fees:,.2f} Hidden Fees Isolated</div>
-            </div>
-        </div>
-
-        <div class="pulse-footer">
-            <span>VaultSheet Autonomous Audit Suite • Confidential Board Briefing</span>
-            <span>100% Offline RAM Execution • Zero Cloud Telemetry</span>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+pulse_html = (
+    "<style>"
+    ".pulse-board{background:linear-gradient(145deg,#0B1221 0%,#090E1A 100%);border:1px solid rgba(56,189,248,0.18);border-radius:20px;padding:32px 36px 26px 36px;margin:18px 0 28px 0;box-shadow:0 20px 50px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.05);font-family:'Plus Jakarta Sans',sans-serif;}"
+    ".pulse-pill{display:inline-block;background:rgba(14,116,144,0.28);border:1px solid rgba(56,189,248,0.35);color:#38BDF8;font-size:0.72rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;padding:5px 14px;border-radius:999px;margin-bottom:14px;}"
+    ".pulse-title{color:#F8FAFC;font-size:2.1rem;font-weight:800;letter-spacing:-0.025em;margin:0 0 8px 0;line-height:1.2;}"
+    ".pulse-subtitle{color:#94A3B8;font-size:0.95rem;font-weight:400;margin:0 0 26px 0;line-height:1.5;}"
+    ".pulse-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;}"
+    "@media (max-width:1100px){.pulse-grid{grid-template-columns:repeat(2,1fr);}}"
+    ".pulse-card{background:rgba(15,23,42,0.75);border:1px solid rgba(148,163,184,0.14);border-radius:14px;padding:20px 22px;transition:all 0.2s ease;}"
+    ".pulse-card:hover{border-color:rgba(56,189,248,0.4);background:rgba(15,23,42,0.95);transform:translateY(-2px);}"
+    ".pulse-label{color:#94A3B8;font-size:0.72rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;}"
+    ".pulse-val-blue{color:#38BDF8;font-size:1.65rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px;white-space:nowrap;}"
+    ".pulse-val-red{color:#F87171;font-size:1.65rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px;white-space:nowrap;}"
+    ".pulse-sub-green{color:#34D399;font-size:0.78rem;font-weight:500;}"
+    ".pulse-sub-amber{color:#FBBF24;font-size:0.78rem;font-weight:500;}"
+    ".pulse-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(148,163,184,0.12);padding-top:16px;margin-top:12px;color:#64748B;font-size:0.78rem;}"
+    "</style>"
+    f'<div class="pulse-board">'
+    f'<div class="pulse-pill">SLIDE 01 • EXECUTIVE TELEMETRY OVERVIEW</div>'
+    f'<div class="pulse-title">Executive Financial &amp; Forensic Audit — {src_name}</div>'
+    f'<div class="pulse-subtitle">Office of the CFO • VaultSheet Autonomous Studio • Mode: <strong style="color:#38BDF8;">{methods_used}</strong> • Total Transactions: <strong style="color:#34D399;">{len(df_active)}</strong> • Offline OCR Pages: <strong>{ocr_pages}</strong> • Unverified Rows: <strong style="color:#34D399;">{unverified_str}</strong></div>'
+    f'<div class="pulse-grid">'
+    f'<div class="pulse-card"><div class="pulse-label">OPENING BALANCE</div><div class="pulse-val-blue">₹{open_bal:,.2f}</div><div class="pulse-sub-green">✓ Verified Starting Anchor</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">TOTAL CREDITS (+)</div><div class="pulse-val-blue">₹{tot_cred:,.2f}</div><div class="pulse-sub-green">↑ {cred_cnt} Inflow Transactions</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">TOTAL DEBITS (-)</div><div class="pulse-val-blue">₹{tot_deb:,.2f}</div><div class="pulse-sub-green">↓ {deb_cnt} Outflow Transactions</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">CLOSING BALANCE</div><div class="pulse-val-blue">₹{close_bal:,.2f}</div><div class="pulse-sub-green">Net Flow: ₹{net_flow:+,.2f}</div></div>'
+    f'</div>'
+    f'<div class="pulse-grid">'
+    f'<div class="pulse-card"><div class="pulse-label">DAILY BURN RATE</div><div class="pulse-val-blue">₹{burn_rate:,.2f}</div><div class="pulse-sub-green">Mean Daily Operating Outflow</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">ESTIMATED CASH RUNWAY</div><div class="pulse-val-blue">{runway_days:.1f} Days</div><div class="pulse-sub-green">✓ Healthy Liquidity Buffer</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">MATH VERIFICATION RATE</div><div class="pulse-val-blue">{math_rate:.1f}%</div><div class="pulse-sub-green">✓ 100% Ledger Continuity Verified</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">FORENSIC RISK EXPOSURE</div><div class="pulse-val-red">{anom_cnt} Rows</div><div class="pulse-sub-amber">₹{hidden_fees:,.2f} Hidden Fees Isolated</div></div>'
+    f'</div>'
+    f'<div class="pulse-footer"><span>VaultSheet Autonomous Audit Suite • Confidential Board Briefing</span><span>100% Offline RAM Execution • Zero Cloud Telemetry</span></div>'
+    f'</div>'
 )
+st.markdown(pulse_html, unsafe_allow_html=True)
 
 
 # ==============================================================================
