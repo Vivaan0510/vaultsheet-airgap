@@ -960,6 +960,23 @@ df_active: pd.DataFrame = st.session_state["audit_df"]
 meta_active: dict[str, Any] = st.session_state["audit_meta"]
 src_name: str = st.session_state["active_source_name"] or "statement.pdf"
 
+def fmt_inr(val: float) -> str:
+    val = float(val or 0.0)
+    sign = "-" if val < 0 else ""
+    val = abs(val)
+    s, dec = f"{val:.2f}".split(".")
+    if len(s) > 3:
+        last3 = s[-3:]
+        rest = s[:-3]
+        parts = []
+        while len(rest) > 2:
+            parts.append(rest[-2:])
+            rest = rest[:-2]
+        if rest:
+            parts.append(rest)
+        s = ",".join(reversed(parts)) + "," + last3
+    return f"{sign}₹{s}.{dec}"
+
 methods_used = (
     ", ".join(sorted(df_active["extraction_method"].unique()))
     if "extraction_method" in df_active.columns
@@ -971,6 +988,8 @@ unverified_str = "None (100% Verified)" if not unverified_list else f"Rows {unve
 cols_lower_map = {str(c).lower().strip(): c for c in df_active.columns}
 deb_c = cols_lower_map.get("debit", cols_lower_map.get("withdrawal", None))
 cred_c = cols_lower_map.get("credit", cols_lower_map.get("deposit", None))
+anom_c = cols_lower_map.get("anomaly_flag", None)
+cat_c = cols_lower_map.get("category", None)
 
 deb_series = pd.to_numeric(df_active[deb_c], errors="coerce").fillna(0).abs() if deb_c else pd.Series(0.0, index=df_active.index)
 cred_series = pd.to_numeric(df_active[cred_c], errors="coerce").fillna(0).abs() if cred_c else pd.Series(0.0, index=df_active.index)
@@ -984,45 +1003,86 @@ net_flow = close_bal - open_bal
 cred_cnt = int((cred_series > 0).sum())
 deb_cnt = int((deb_series > 0).sum())
 
-burn_rate = float(meta_active.get("daily_burn_rate", 0.0) or 0.0)
-runway_days = float(meta_active.get("estimated_cash_runway_days", 0.0) or 0.0)
-math_rate = float(meta_active.get("math_verification_rate", 100.0) or 100.0)
-anom_cnt = int(meta_active.get("anomaly_count", 0) or 0)
-hidden_fees = float(meta_active.get("hidden_fees_total", 0.0) or 0.0)
+burn_rate = float(
+    meta_active.get("daily_burn_rate")
+    or meta_active.get("burn_rate_daily")
+    or (tot_deb / 22.0 if tot_deb > 0 else 0.0)
+)
+runway_days = float(
+    meta_active.get("estimated_cash_runway_days")
+    or meta_active.get("cash_runway_days")
+    or meta_active.get("runway_days")
+    or (close_bal / burn_rate if burn_rate > 0 else 0.0)
+)
+math_rate = float(
+    meta_active.get("math_verification_rate")
+    or meta_active.get("verification_rate_pct")
+    or (100.0 if not unverified_list else max(0.0, 100.0 - len(unverified_list) / max(len(df_active), 1) * 100.0))
+)
+
+if anom_c:
+    live_anom_mask = df_active[anom_c].notna() & (df_active[anom_c].astype(str).str.strip() != "") & (df_active[anom_c].astype(str).str.lower() != "none")
+    live_anom_cnt = int(live_anom_mask.sum())
+else:
+    live_anom_cnt = 0
+
+anom_cnt = int(
+    meta_active.get("anomaly_count")
+    or meta_active.get("flagged_transactions_count")
+    or meta_active.get("flagged_rows")
+    or live_anom_cnt
+)
+
+if cat_c:
+    fee_mask = df_active[cat_c].astype(str).str.contains("fee|charge|penalt", case=False, na=False)
+    live_fees = float(deb_series[fee_mask].sum())
+else:
+    live_fees = 0.0
+
+hidden_fees = float(
+    meta_active.get("hidden_fees_total")
+    or meta_active.get("hidden_bank_fees_inr")
+    or meta_active.get("hidden_bank_fees")
+    or live_fees
+)
 ocr_pages = int(meta_active.get("ocr_page_count", 0) or 0)
+
+net_sign = "+" if net_flow >= 0 else "-"
+net_str = f"{net_sign}{fmt_inr(abs(net_flow))}"
 
 pulse_html = (
     "<style>"
-    ".pulse-board{background:linear-gradient(145deg,#0B1221 0%,#090E1A 100%);border:1px solid rgba(56,189,248,0.18);border-radius:20px;padding:32px 36px 26px 36px;margin:18px 0 28px 0;box-shadow:0 20px 50px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.05);font-family:'Plus Jakarta Sans',sans-serif;}"
+    ".block-container{max-width:1220px !important;padding-left:2rem !important;padding-right:2rem !important;}"
+    ".pulse-board{background:linear-gradient(145deg,#0B1324 0%,#080D1A 100%);border:1px solid rgba(56,189,248,0.16);border-radius:20px;padding:34px 38px 26px 38px;margin:18px 0 28px 0;box-shadow:0 24px 60px rgba(0,0,0,0.65),inset 0 1px 0 rgba(255,255,255,0.06);font-family:'Plus Jakarta Sans',sans-serif;width:100%;box-sizing:border-box;}"
     ".pulse-pill{display:inline-block;background:rgba(14,116,144,0.28);border:1px solid rgba(56,189,248,0.35);color:#38BDF8;font-size:0.72rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;padding:5px 14px;border-radius:999px;margin-bottom:14px;}"
-    ".pulse-title{color:#F8FAFC;font-size:2.1rem;font-weight:800;letter-spacing:-0.025em;margin:0 0 8px 0;line-height:1.2;}"
-    ".pulse-subtitle{color:#94A3B8;font-size:0.95rem;font-weight:400;margin:0 0 26px 0;line-height:1.5;}"
-    ".pulse-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;}"
-    "@media (max-width:1100px){.pulse-grid{grid-template-columns:repeat(2,1fr);}}"
-    ".pulse-card{background:rgba(15,23,42,0.75);border:1px solid rgba(148,163,184,0.14);border-radius:14px;padding:20px 22px;transition:all 0.2s ease;}"
-    ".pulse-card:hover{border-color:rgba(56,189,248,0.4);background:rgba(15,23,42,0.95);transform:translateY(-2px);}"
-    ".pulse-label{color:#94A3B8;font-size:0.72rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;}"
-    ".pulse-val-blue{color:#38BDF8;font-size:1.65rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px;white-space:nowrap;}"
-    ".pulse-val-red{color:#F87171;font-size:1.65rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px;white-space:nowrap;}"
-    ".pulse-sub-green{color:#34D399;font-size:0.78rem;font-weight:500;}"
-    ".pulse-sub-amber{color:#FBBF24;font-size:0.78rem;font-weight:500;}"
-    ".pulse-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(148,163,184,0.12);padding-top:16px;margin-top:12px;color:#64748B;font-size:0.78rem;}"
+    ".pulse-title{color:#F8FAFC;font-size:2.05rem;font-weight:800;letter-spacing:-0.025em;margin:0 0 8px 0;line-height:1.25;}"
+    ".pulse-subtitle{color:#94A3B8;font-size:0.92rem;font-weight:400;margin:0 0 26px 0;line-height:1.5;}"
+    ".pulse-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:18px;width:100%;}"
+    "@media (max-width:980px){.pulse-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}"
+    ".pulse-card{background:rgba(15,23,42,0.72);border:1px solid rgba(148,163,184,0.12);border-radius:14px;padding:22px 24px;min-height:128px;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;transition:all 0.2s ease;}"
+    ".pulse-card:hover{border-color:rgba(56,189,248,0.38);background:rgba(15,23,42,0.92);transform:translateY(-2px);}"
+    ".pulse-label{color:#94A3B8;font-size:0.72rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
+    ".pulse-val-blue{color:#38BDF8;font-size:1.7rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px;white-space:nowrap;}"
+    ".pulse-val-red{color:#F87171;font-size:1.7rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px;white-space:nowrap;}"
+    ".pulse-sub-green{color:#34D399;font-size:0.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
+    ".pulse-sub-amber{color:#FBBF24;font-size:0.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
+    ".pulse-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(148,163,184,0.12);padding-top:16px;margin-top:8px;color:#64748B;font-size:0.78rem;}"
     "</style>"
     f'<div class="pulse-board">'
-    f'<div class="pulse-pill">SLIDE 01 • EXECUTIVE TELEMETRY OVERVIEW</div>'
+    f'<div class="pulse-pill">SLIDE 01 • EXECUTIVE OVERVIEW</div>'
     f'<div class="pulse-title">Executive Financial &amp; Forensic Audit — {src_name}</div>'
     f'<div class="pulse-subtitle">Office of the CFO • VaultSheet Autonomous Studio • Mode: <strong style="color:#38BDF8;">{methods_used}</strong> • Total Transactions: <strong style="color:#34D399;">{len(df_active)}</strong> • Offline OCR Pages: <strong>{ocr_pages}</strong> • Unverified Rows: <strong style="color:#34D399;">{unverified_str}</strong></div>'
     f'<div class="pulse-grid">'
-    f'<div class="pulse-card"><div class="pulse-label">OPENING BALANCE</div><div class="pulse-val-blue">₹{open_bal:,.2f}</div><div class="pulse-sub-green">✓ Verified Starting Anchor</div></div>'
-    f'<div class="pulse-card"><div class="pulse-label">TOTAL CREDITS (+)</div><div class="pulse-val-blue">₹{tot_cred:,.2f}</div><div class="pulse-sub-green">↑ {cred_cnt} Inflow Transactions</div></div>'
-    f'<div class="pulse-card"><div class="pulse-label">TOTAL DEBITS (-)</div><div class="pulse-val-blue">₹{tot_deb:,.2f}</div><div class="pulse-sub-green">↓ {deb_cnt} Outflow Transactions</div></div>'
-    f'<div class="pulse-card"><div class="pulse-label">CLOSING BALANCE</div><div class="pulse-val-blue">₹{close_bal:,.2f}</div><div class="pulse-sub-green">Net Flow: ₹{net_flow:+,.2f}</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">OPENING BALANCE</div><div class="pulse-val-blue">{fmt_inr(open_bal)}</div><div class="pulse-sub-green">✓ Verified Starting Anchor</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">TOTAL CREDITS (+)</div><div class="pulse-val-blue">{fmt_inr(tot_cred)}</div><div class="pulse-sub-green">↑ {cred_cnt} Inflow Transactions</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">TOTAL DEBITS (-)</div><div class="pulse-val-blue">{fmt_inr(tot_deb)}</div><div class="pulse-sub-green">↓ {deb_cnt} Outflow Transactions</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">CLOSING BALANCE</div><div class="pulse-val-blue">{fmt_inr(close_bal)}</div><div class="pulse-sub-green">Net Flow: {net_str}</div></div>'
     f'</div>'
     f'<div class="pulse-grid">'
-    f'<div class="pulse-card"><div class="pulse-label">DAILY BURN RATE</div><div class="pulse-val-blue">₹{burn_rate:,.2f}</div><div class="pulse-sub-green">Mean Daily Operating Outflow</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">DAILY BURN RATE</div><div class="pulse-val-blue">{fmt_inr(burn_rate)}</div><div class="pulse-sub-green">Mean Daily Operating Outflow</div></div>'
     f'<div class="pulse-card"><div class="pulse-label">ESTIMATED CASH RUNWAY</div><div class="pulse-val-blue">{runway_days:.1f} Days</div><div class="pulse-sub-green">✓ Healthy Liquidity Buffer</div></div>'
-    f'<div class="pulse-card"><div class="pulse-label">MATH VERIFICATION RATE</div><div class="pulse-val-blue">{math_rate:.1f}%</div><div class="pulse-sub-green">✓ 100% Ledger Continuity Verified</div></div>'
-    f'<div class="pulse-card"><div class="pulse-label">FORENSIC RISK EXPOSURE</div><div class="pulse-val-red">{anom_cnt} Rows</div><div class="pulse-sub-amber">₹{hidden_fees:,.2f} Hidden Fees Isolated</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">MATH VERIFICATION RATE</div><div class="pulse-val-blue">{math_rate:.1f}%</div><div class="pulse-sub-green">✓ 100% Ledger Verified</div></div>'
+    f'<div class="pulse-card"><div class="pulse-label">FORENSIC RISK EXPOSURE</div><div class="pulse-val-red">{anom_cnt} Rows</div><div class="pulse-sub-amber">{fmt_inr(hidden_fees)} Hidden Fees Isolated</div></div>'
     f'</div>'
     f'<div class="pulse-footer"><span>VaultSheet Autonomous Audit Suite • Confidential Board Briefing</span><span>100% Offline RAM Execution • Zero Cloud Telemetry</span></div>'
     f'</div>'
