@@ -258,7 +258,7 @@ def _add_table(ws, name: str, columns: int, last_row: int):
     ref = f"A{HEADER_ROW}:{get_column_letter(columns)}{last_row}"
     ws.auto_filter.ref = ref
     if last_row > HEADER_ROW:
-        table = Table(displayName=name, ref=ref)
+        # table = Table(displayName=name, ref=ref)  # Disabled fragile XML Table
         table.tableStyleInfo = TableStyleInfo(
             name="TableStyleMedium2",
             showFirstColumn=False,
@@ -266,7 +266,9 @@ def _add_table(ws, name: str, columns: int, last_row: int):
             showRowStripes=True,
             showColumnStripes=False,
         )
-        ws.add_table(table)
+        # ws.add_table(table)  # Disabled fragile XML Table
+        ws.auto_filter.ref = ws.dimensions
+        ws.freeze_panes = 'A2'
 
 
 def _risk_formatting(ws, last_row: int, last_column: int):
