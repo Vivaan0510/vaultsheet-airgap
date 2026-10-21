@@ -983,7 +983,7 @@ methods_used = (
     else str(meta_active.get("extraction_method", "native_stream"))
 )
 unverified_list = meta_active.get("unverified_row_ids", [])
-unverified_str = "None (100% Verified)" if not unverified_list else f"Rows {unverified_list}"
+unverified_str = "None (100% Verified)" if not unverified_list else (f"{len(unverified_list)} Rows Failed" if len(unverified_list) > 5 else f"Rows {unverified_list}")
 
 cols_lower_map = {str(c).lower().strip(): c for c in df_active.columns}
 deb_c = cols_lower_map.get("debit", cols_lower_map.get("withdrawal", None))
