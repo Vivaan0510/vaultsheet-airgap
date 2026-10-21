@@ -72,7 +72,6 @@ and Excel exports strictly inside volatile RAM (`io.BytesIO`) with zero disk per
 of uploaded user statements.
 
 Dependencies:
-    pip install streamlit pandas numpy openpyxl pdfplumber pypdf pypdfium2 rapidocr_onnxruntime scikit-learn
 """
 
 
@@ -1523,7 +1522,6 @@ with tab_analytics:
 # TAB 5: MULTI-FORMAT EXPORT HUB (EXCEL WORKBOOK, TALLY XML, N8N JSON, CSV)
 # ------------------------------------------------------------------------------
 with tab_export:
-    st.markdown("#### 📥 Zero-Retention In-Memory Export Hub")
     st.caption(
         "All export artifacts are compiled dynamically inside `io.BytesIO` buffers and streamed "
         "directly to your browser."
