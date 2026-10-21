@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 
-# --- BILINGUAL PDF LAYER DE-INTERLEAVER & CAS GUARD ---
 import re as _re_cas
 
 def _clean_bilingual_collision(text) -> str:
@@ -32,7 +31,6 @@ def _is_cas_or_multifolio_df(df, meta=None) -> bool:
     return False
 
 
-# --- BILINGUAL PDF LAYER DE-INTERLEAVER & CAS GUARD ---
 import re as _re_cas
 
 def _clean_bilingual_collision(text) -> str:
@@ -81,7 +79,6 @@ Dependencies:
 
 
 
-# --- BILINGUAL PDF LAYER DE-INTERLEAVER & CAS GUARD ---
 import re as _re_cas
 
 def _clean_bilingual_collision(text) -> str:
@@ -938,7 +935,6 @@ if ai_query.strip():
 import hashlib
 import math
 
-# --- BILINGUAL PDF LAYER DE-INTERLEAVER & CAS GUARD ---
 import re as _re_cas
 
 def _clean_bilingual_collision(text) -> str:
@@ -1601,3 +1597,34 @@ with tab_export:
             "metadata": meta_active,
             "rows_preview": df_active.head(3).to_dict(orient="records"),
         })
+
+
+# --- BILINGUAL PDF LAYER DE-INTERLEAVER & CAS GUARD ---
+import re as _re_cas
+
+def _clean_bilingual_collision(text) -> str:
+    if text is None:
+        return ""
+    s = str(text)
+    if s.lower() in ("nan", "none", "nat", "<na>"):
+        return ""
+    s = _re_cas.sub(r"[\ufffd\u25a1\u25a0\u0000-\u001f\u007f-\u009f\uf000-\uf8ff]", "", s)
+    s = _re_cas.sub(r"[\u0900-\u097F\uA8E0-\uA8FF]+", "", s)
+    s = _re_cas.sub(r"\bO\s*p\s*e\s*n\s*i\s*n\s*g\b", "Opening", s, flags=_re_cas.IGNORECASE)
+    s = _re_cas.sub(r"\bC\s*l\s*o\s*s\s*i\s*n\s*g\b", "Closing", s, flags=_re_cas.IGNORECASE)
+    s = _re_cas.sub(r"\bB\s*a\s*l\s*a\s*n\s*c\s*e\b", "Balance", s, flags=_re_cas.IGNORECASE)
+    s = _re_cas.sub(r"\s{2,}", " ", s).strip()
+    return s
+
+def _is_cas_or_multifolio_df(df, meta=None) -> bool:
+    if df is None or df.empty:
+        return False
+    col_str = " ".join(str(c).lower() for c in df.columns)
+    if any(k in col_str for k in ("isin", "nav", "unit", "folio", "scheme", "security", "dp id")):
+        return True
+    sample_txt = " ".join(df.astype(str).head(40).values.flatten()).lower()
+    if any(k in sample_txt for k in ("isin", "inf1", "ine0", "mutual fund", "scheme name", "folio", "direct growth", "nsdl", "cdsl", "opening balance", "closing balance")):
+        return True
+    if meta and str(meta.get("extraction_method", "")).lower() in ("universal_cas_fallback", "omni_parser_fallback"):
+        return True
+    return False
