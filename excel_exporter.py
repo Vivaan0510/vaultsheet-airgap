@@ -331,6 +331,39 @@ def _autofit(ws, *, start_row: int = HEADER_ROW):
     ws.print_area = f"A1:{get_column_letter(ws.max_column)}{ws.max_row}"
 
 
+
+# ==============================================================================
+# EXCEL 2024 OPENXML SANITIZER & ANTI-OVERLAP PATCH
+# ==============================================================================
+import math as _math
+import re as _re
+
+_ILLEGAL_XML_RE = _re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+
+def _clean_excel_str(val) -> str:
+    if val is None:
+        return ""
+    s = str(val)
+    if s.lower() in ("nan", "none", "nat", "<na>"):
+        return ""
+    # 1. Strip illegal OpenXML control characters that trigger Excel 2024 repair popup
+    s = _ILLEGAL_XML_RE.sub(" ", s)
+    # 2. Collapse embedded newlines/tabs into a single space to prevent overlapping lines
+    s = _re.sub(r"[\r\n\t]+", " | ", s)
+    s = _re.sub(r"\s{2,}", " ", s).strip()
+    # 3. Prevent Excel 2024 from misinterpreting text starting with =, +, -, @ as broken formulas
+    if s.startswith(("=", "+", "-", "@")):
+        s = "'" + s
+    return s[:32000]
+
+def _clean_excel_num(val) -> float:
+    try:
+        f = float(val)
+        return 0.0 if (_math.isnan(f) or _math.isinf(f)) else round(f, 2)
+    except Exception:
+        return 0.0
+
+
 def _validate_and_prepare(df: pd.DataFrame, metadata: dict):
     if not isinstance(df, pd.DataFrame):
         raise TypeError("df must be a pandas DataFrame.")
