@@ -67,7 +67,6 @@ def _is_cas_or_multifolio_df(df, meta=None) -> bool:
 """
 app.py
 ------
-Zero-Retention, 100% Air-Gapped Indian Bank Statement Forensic Auditor & TallyPrime Bridge.
 Built with Streamlit. Processes all PDFs, passwords, OCR rasters, ML classifications,
 and Excel exports strictly inside volatile RAM (`io.BytesIO`) with zero disk persistence
 of uploaded user statements.
