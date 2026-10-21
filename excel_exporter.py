@@ -256,7 +256,7 @@ def _headers(ws, labels: list[str], row: int = HEADER_ROW, start: int = 1):
 
 def _add_table(ws, name: str, columns: int, last_row: int):
     ref = f"A{HEADER_ROW}:{get_column_letter(columns)}{last_row}"
-    ws.auto_filter.ref = ref
+    #disabled_autofilter_ref
     if last_row > HEADER_ROW:
         # table = Table(displayName=name, ref=ref)  # Disabled fragile XML Table
         table.tableStyleInfo = TableStyleInfo(
@@ -266,8 +266,8 @@ def _add_table(ws, name: str, columns: int, last_row: int):
             showRowStripes=True,
             showColumnStripes=False,
         )
-        # ws.add_table(table)  # Disabled fragile XML Table
-        ws.auto_filter.ref = ws.dimensions
+        # #disabled_add_table  # Disabled fragile XML Table
+        #disabled_autofilter_ref
         ws.freeze_panes = 'A2'
 
 
@@ -879,3 +879,64 @@ if __name__ == "__main__":
         str(workbook_path),
     )
     print(f"Created audited workbook: {saved_path}")
+
+
+# ==============================================================================
+# PERMANENT MS EXCEL 2024 OPENXML TABLE GUARD (NEVER GENERATE /xl/tables/*.xml)
+# ==============================================================================
+import openpyxl.worksheet.worksheet as _oxl_ws
+
+# 1. Disable openpyxl Worksheet.add_table globally so /xl/tables/table*.xml can NEVER be created
+def _noop_add_table(self, table):
+    return None
+
+_oxl_ws.Worksheet.add_table = _noop_add_table
+
+# 2. Wrap export_to_excel to guarantee every worksheet has zero XML tables & clean XML characters
+if "_orig_export_to_excel" not in globals() and "export_to_excel" in globals():
+    _orig_export_to_excel = export_to_excel
+
+    def export_to_excel(*args, **kwargs):
+        import io as _io
+        import openpyxl as _openpyxl
+        import re as _re
+
+        raw_out = _orig_export_to_excel(*args, **kwargs)
+
+        # Extract bytes whether export_to_excel returns bytes, BytesIO, or writes to a path
+        if isinstance(raw_out, (bytes, bytearray)):
+            bio = _io.BytesIO(raw_out)
+            return_bytes = True
+        elif hasattr(raw_out, "getvalue"):
+            bio = _io.BytesIO(raw_out.getvalue())
+            return_bytes = False
+        else:
+            return raw_out
+
+        wb = _openpyxl.load_workbook(bio)
+        _bad_xml = _re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+
+        for ws in wb.worksheets:
+            # Completely clear any XML tables & fragile autofilter XML ranges
+            if hasattr(ws, "_tables"):
+                ws._tables.clear()
+            ws.auto_filter.ref = None
+
+            # Sanitize every cell value in every sheet so Excel 2024 never flags unreadable content
+            for row in ws.iter_rows():
+                for cell in row:
+                    val = cell.value
+                    if isinstance(val, str):
+                        s = _bad_xml.sub(" ", val)
+                        s = _re.sub(r"[\r\n\t]+", " | ", s)
+                        # Only keep safe "=" if it is a genuine known Excel formula (SUM, IF, COUNT, etc.)
+                        if s.startswith(("+", "-", "@")):
+                            s = "'" + s
+                        elif s.startswith("=") and not _re.match(r"^=[A-Z0-9_]+\(", s.upper()):
+                            s = "'" + s
+                        cell.value = s[:32000]
+
+        clean_bio = _io.BytesIO()
+        wb.save(clean_bio)
+        clean_bio.seek(0)
+        return clean_bio.getvalue() if return_bytes else clean_bio

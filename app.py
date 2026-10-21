@@ -40,7 +40,11 @@ except ImportError:
 TEST_DIR = Path(__file__).resolve().parent / "test_statements"
 
 try:
-    from excel_exporter import export_to_excel
+    import importlib
+import excel_exporter
+importlib.reload(excel_exporter)
+from excel_exporter import export_to_excel
+# from excel_exporter import export_to_excel
 except ImportError:
     # Self-healing in-memory Excel exporter fallback if excel_exporter.py is not yet created
     def export_to_excel(
