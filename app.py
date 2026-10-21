@@ -71,7 +71,6 @@ Built with Streamlit. Processes all PDFs, passwords, OCR rasters, ML classificat
 and Excel exports strictly inside volatile RAM (`io.BytesIO`) with zero disk persistence
 of uploaded user statements.
 
-Dependencies:
 """
 
 
