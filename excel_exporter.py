@@ -971,7 +971,35 @@ def _is_cas_or_multifolio_df(df, meta=None) -> bool:
 _prev_export_fn = export_to_excel
 
 def export_to_excel(df, meta=None, *args, **kwargs):
-    if df is not None and not df.empty:
+    
+    # --- ABSOLUTE OVERDRAFT GUARD (POST-CACHE) ---
+    import pandas as _pd
+    if df is not None and not df.empty and 'debit' in df.columns and 'credit' in df.columns and 'balance' in df.columns:
+        df = df.copy()
+        
+        # Ensure pure numerics
+        for col in ['debit', 'credit', 'balance']:
+            df[col] = _pd.to_numeric(df[col].astype(str).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0.0)
+            
+        if len(df) > 1:
+            running_bal = float(df['balance'].iloc[0])
+            for i in range(1, len(df)):
+                debit_val = float(df['debit'].iloc[i])
+                credit_val = float(df['credit'].iloc[i])
+                
+                # Check if a Debit was falsely flipped to a Credit due to a stripped negative sign
+                if credit_val > 0 and debit_val == 0:
+                    expected_if_debit = running_bal - credit_val
+                    parsed_bal = float(df['balance'].iloc[i])
+                    
+                    if abs(expected_if_debit - parsed_bal) < 0.01 or abs(expected_if_debit + parsed_bal) < 0.01:
+                        # Revert the false flip!
+                        df.at[i, 'debit'] = credit_val
+                        df.at[i, 'credit'] = 0.0
+                        df.at[i, 'balance'] = expected_if_debit
+                        
+                running_bal = df.at[i, 'balance']
+
         df = df.copy()
         for c in df.columns:
             if df[c].dtype == object or str(df[c].dtype).startswith("str"):
