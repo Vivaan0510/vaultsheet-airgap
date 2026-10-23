@@ -1623,3 +1623,27 @@ def _is_cas_or_multifolio_df(df, meta=None) -> bool:
     if meta and str(meta.get("extraction_method", "")).lower() in ("universal_cas_fallback", "omni_parser_fallback"):
         return True
     return False
+
+
+# --- REAL-TIME OVERDRAFT RECALCULATOR (BYPASSES ALL CACHES) ---
+if "audit_df" in st.session_state and st.session_state["audit_df"] is not None:
+    _df = st.session_state["audit_df"]
+    if 'debit' in _df.columns and 'credit' in _df.columns and 'balance' in _df.columns and len(_df) > 1:
+        try:
+            _running = float(str(_df['balance'].iloc[0]).replace(',','').replace(' ',''))
+            for _i in range(1, len(_df)):
+                _d = float(str(_df['debit'].iloc[_i]).replace(',','').replace(' ','')) if str(_df['debit'].iloc[_i]).strip() else 0.0
+                _c = float(str(_df['credit'].iloc[_i]).replace(',','').replace(' ','')) if str(_df['credit'].iloc[_i]).strip() else 0.0
+                
+                if _c > 0 and _d == 0:
+                    _expected_d = _running - _c
+                    _parsed = float(str(_df['balance'].iloc[_i]).replace(',','').replace(' ',''))
+                    
+                    if abs(_expected_d - _parsed) < 0.01 or abs(_expected_d + _parsed) < 0.01:
+                        _df.at[_i, 'debit'] = _c
+                        _df.at[_i, 'credit'] = 0.0
+                        _df.at[_i, 'balance'] = _expected_d
+                        
+                _running = float(str(_df['balance'].iloc[_i]).replace(',','').replace(' ',''))
+        except Exception:
+            pass
