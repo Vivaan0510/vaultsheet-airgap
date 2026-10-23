@@ -773,3 +773,33 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# --- OVERDRAFT & NEGATIVE BALANCE GUARD ---
+import pandas as _pd
+
+if "_orig_run_cat2" not in globals():
+    _orig_run_cat2 = run_categorization_and_audit
+
+    def run_categorization_and_audit(df, meta, *args, **kwargs):
+        if df is not None and not df.empty and 'debit' in df.columns and 'credit' in df.columns and 'balance' in df.columns:
+            df = df.copy()
+            
+            # 1. Ensure numeric columns are floats and preserve negatives
+            for col in ['debit', 'credit', 'balance']:
+                df[col] = _pd.to_numeric(df[col].astype(str).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0.0)
+            
+            # 2. Fix stripped negative signs on balances before the continuity engine flips debits/credits
+            if len(df) > 1:
+                running_bal = df['balance'].iloc[0]
+                for idx in range(1, len(df)):
+                    expected_bal = running_bal - df['debit'].iloc[idx] + df['credit'].iloc[idx]
+                    parsed_bal = df['balance'].iloc[idx]
+                    
+                    # If parser stripped the negative sign (e.g., expected -250, parsed 250)
+                    if abs(expected_bal - parsed_bal) > 0.01 and abs(expected_bal + parsed_bal) < 0.01:
+                        df.at[idx, 'balance'] = expected_bal
+                        
+                    running_bal = df.at[idx, 'balance']
+                    
+        return _orig_run_cat2(df, meta, *args, **kwargs)
