@@ -64,7 +64,7 @@ def _is_cas_or_multifolio_df(df, meta=None) -> bool:
     return False
 
 #!/usr/bin/env python3
-"""
+_APP_DOCSTRING = """
 ------
 Built with Streamlit. Processes all PDFs, passwords, OCR rasters, ML classifications,
 and Excel exports strictly inside volatile RAM (`io.BytesIO`) with zero disk persistence
