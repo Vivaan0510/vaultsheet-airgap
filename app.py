@@ -122,6 +122,13 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+st.set_page_config(
+    page_title="VaultSheet — Financial Intelligence & Forensic Audit",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # ==============================================================================
 # EXACT BACKEND IMPORTS
 # ==============================================================================
